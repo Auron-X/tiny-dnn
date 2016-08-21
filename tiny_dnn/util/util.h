@@ -40,6 +40,8 @@
 #include "tiny_dnn/util/nn_error.h"
 #include "tiny_dnn/util/parallel_for.h"
 #include "tiny_dnn/util/random.h"
+#include "third_party/libMR/MetaRecognition.h"
+#include "third_party/libMR/weibull.h"
 
 #define CNN_UNREFERENCED_PARAMETER(x) (void)(x)
 
@@ -322,6 +324,50 @@ inline void fill_tensor(tensor_t& tensor, float_t value, cnn_size_t size) {
     for (auto& t : tensor) {
         t.resize(size, value);
     }
+}
+
+//Function calculated a Weibull fitting parameters for a batch of samples of a given class
+//@scores - a 2D array containing of scores from preultimate layer (F8 in AlexNet)
+//@N - number of classes
+//@tail_N - length of data tail_data for Weibull fitting calculation
+#include <iostream>
+#include <algorithm>
+#include <vector>
+#include <D:\Dropbox\GSoC 2016\Project\tiny-dnn\third_party\libMR\MetaRecognition.h>
+#include <D:\Dropbox\GSoC 2016\Project\tiny-dnn\third_party\libMR\weibull.h>
+
+MetaRecognition evt_weibull(std::vector<std::vector<float>> scores, int N, int tail_N)
+{
+	//Calculate Mean Activation Vectors (MAV)
+	std::vector <float> mav, ds;
+	for (int i = 0; i < scores.size(); i++)
+	{
+		float avg = 0;
+		for (int j = 0; j < scores[i].size(); j++)
+			avg += scores[i][j];
+		avg /= scores[i].size();
+		mav.push_back(avg);
+	}
+
+	//Calculate new scores basing on the Euclidian distance to MAV
+	for (int i = 0; i < scores.size(); i++)
+	{
+		float dist = 0;
+		for (int j = 0; j < scores[i].size(); j++)
+			dist += (scores[i][j] - mav[i]) * (scores[i][j] - mav[i]);
+		dist /= scores[i].size();
+		ds.push_back(dist);
+	}
+
+	//Select 20 highest Distance scores
+	std::sort(ds.begin(), ds.end());
+	double* fit_data = new double[tail_N];
+	for (int i = 0; i < tail_N; i++)
+		fit_data[i] = ds[ds.size() - i - 1];
+
+	//MetaRecognition
+	MetaRecognition mr;
+	mr.FitHigh(fit_data, tail_N);
 }
 
 } // namespace tiny_dnn
